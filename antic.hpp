@@ -2,7 +2,7 @@
  **
  ** Atari++ emulator (c) 2002 THOR-Software, Thomas Richter
  **
- ** $Id: antic.hpp,v 1.58 2010-04-24 19:54:16 thor Exp $
+ ** $Id: antic.hpp,v 1.68 2013-01-14 12:54:10 thor Exp $
  **
  ** In this module: Antic graphics emulation
  **
@@ -60,7 +60,7 @@ public:
   // The first generated scan line
   static const int DisplayStart        INIT(8);
   // The total height of the display in rows. 
-  static const int DisplayHeight       INIT(249);
+  static const int DisplayHeight       INIT(248);
   // Lines up to the start of the VBI
   static const int VBIStart            INIT(248);
   // Total lines in an NTSC display
@@ -68,7 +68,7 @@ public:
   // Total lines in an PAL display (312)
   static const int PALTotal            INIT(312);
   // Total number of lines visible in a window.
-  static const int WindowHeight        INIT(DisplayHeight - DisplayStart - 1);
+  static const int WindowHeight        INIT(DisplayHeight - DisplayStart);
   // Total number of rows visible.
   static const int WindowWidth         INIT(DisplayWidth - 32);
 #ifndef HAS_PRIVATE_ACCESS
@@ -107,20 +107,30 @@ private:
   // Pointer to GTIA for scanline activity
   class GTIA       *Gtia;
   //
-  // The following variables describe the left and right border of the
-  // display DMA, depending on whether horizontal scrolling is enabled
-  // or not. This is measured in half color clocks
-  int XMinNoScroll,XMaxNoScroll;
-  int XMinScroll,XMaxScroll;
-  int DMAWidthNoScroll;// Width of the display as base for the DMAShift of the mode lines
-  int DMAWidthScroll;
-  int FirstDMACycleNoScroll; // first cycle on screen that will require DMA slots w/o scrolling
-  int LastDMACycleNoScroll;  // last cycle on screen that will require DMA slots w/o scrolling
-  int FirstDMACycleScroll;
-  int LastDMACycleScroll;
+  // The DMA Info for a single slot.
+  struct DMAAllocator {
+    int FirstCycle;   // Where the first cycle has to be allocated
+    int NumCycles;    // number of cycles to allocate.
+  };
   //
-  // CPU cycles stolen for player/missile DMA
-  int PMDMACycles;
+  // The DMA generator: Defines where to load the cycles.
+  struct DMAGenerator {
+    struct DMAAllocator Playfield;  // where playfield data fetches start
+    struct DMAAllocator Glyph;      // glyph data
+    struct DMAAllocator Character;  // character graphics data.
+    int                 FillInOffset; // where to place the character data in the buffer.
+  };
+  //
+  // A DMA timing consists of a pair of timings, one for non-scrolled and
+  // one for scrolled data.
+  struct DMATimingPair {
+    struct DMAGenerator Regular;
+    struct DMAGenerator Scrolled;
+  } *ActiveDMATiming;
+  //
+  //
+  // DMA Timings for narrow, normal and wide displays.
+  struct DMATimingPair DMA_None,DMA_Narrow,DMA_Normal,DMA_Wide;
   //
   // The following mini-structure describes the character generator.
   // We have two of them, a 20 characters/row and a 40 characters/row generator.
@@ -157,11 +167,10 @@ private:
   UBYTE NMIEnable;    // NMI masking/enable register
   UBYTE NMIStat;      // NMI status register
   UBYTE DMACtrl;      // DMA control register
-  UBYTE DMACtrlShadow;// DMA control register, updated at the end of the scanline
   UBYTE CharCtrl;     // Character control register shaddow of the character generator
   UBYTE HScroll;      // Horizontal scroll offset
   UBYTE VScroll;      // Vertical scroll offset
-  UBYTE BusNoise[5];  // latest BusNoise rolled out at the start of each mode-line
+  UBYTE PlayerData[5];// Antic service for GTIA: Data fetched or seen as p/m data.
   //
   //
   // Antic intermediate scanline buffer. Data is DMA'd from memory into
@@ -326,51 +335,88 @@ private:
   // mode type.
   struct ModeLine *ModeLines[16];
   // 
-  // Last modeline data. We keep them here as to be able to rebuild the modeline
-  // contents on the fly should the user change the antic settings during the
-  // horizontal line.
-  struct ModeLine *CurrentMode; // current mode of the scan line
-  UBYTE *FillIn;             // target position where to fill-in output data. This represents the GTIA input.
-  int    Width;              // # of bytes that modeline generator fills in
-  int    DisplayLine;        // in case this modeline has more than one scanline, this is the scanline #
-  int    HShift;             // precomputed horizontal shift
-  bool   NMIFlag;            // set if an NMI/DLI has to be generated on the next line
-  bool   NMILevel;           // true if NMI is currently low and thus active
+  // Scanline generator: This helper is responsible for drawing a single
+  // scan line.
+  struct Scanline {
+    //
+    // Last modeline data. We keep them here as to be able to rebuild the modeline
+    // contents on the fly should the user change the antic settings during the
+    // horizontal line.
+    struct ModeLine *CurrentMode; // current mode of the scan line
+    //
+    // Output buffer position
+    UBYTE           *LineBuffer;
+    //
+    // Fill-in position in the antic output buffer.
+    UBYTE           *FillIn;
+    //
+    // Minimum and maximum border position
+    int              XMin;
+    int              XMax;
+    int              Width;
+    //
+    // Generated line (for the character modes) of the mode line
+    int              DisplayLine;
+    //
+    // The constructor: Just reset the entries.
+    Scanline(void)
+      : CurrentMode(NULL), LineBuffer(NULL), FillIn(NULL)
+    {
+    }
+    //
+    // Precompute the parameters for generating a single
+    // scan line. First argument is the modeline,
+    // then the active DMA settings for the scrolled screen,
+    // followed by the regular parameters defining the nominal
+    // borders where we clip.
+    // Last are the output buffer itself, followed by the scroll
+    // offset and the current line in the modeline.
+    void ComputeLineParameters(struct ModeLine *mode,
+			       struct DMAGenerator *dma,
+			       struct DMAGenerator *borders,
+			       UBYTE *buffer,int xscroll,int displayline);
+    //
+    // Reset the mode line, no current mode active.
+    void NoMode(void)
+    {
+      CurrentMode = NULL;
+      LineBuffer  = NULL;
+    }
+    //
+    // Generate a single scan line.
+    void GenerateScanline(void) const;
+    //
+    // Check whether the currently active mode is a fiddled mode, i.e. 
+    // a hires mode generating half color clocks.
+    bool isFiddled(void) const
+    {
+      if (CurrentMode)
+	return CurrentMode->Fiddling;
+      return false;
+    }
+    //
+  }      ScanlineGenerator;
+  //
+  // Current instruction - stored for next line.
+  UBYTE  PreviousIR;
   //
   // Some Antic Preferences
   bool NTSC;                 // true if this is an NTSC antic
   //
-  LONG BeforeDLICycles;      // horizontal position of the DLI in CPU clocks.
-  LONG BeforeDisplayClocks;  // Number of half cpu cycles in front of the display.
+  LONG GTIAStart;            // Horizontal position where GTIA processing starts.
   LONG YPosIncSlot;          // horizontal position where YPos gets incremented
+  LONG TotalLines;           // Number of total lines in this machine
   //
   // Some Antic built-ins:
-  // 
-  // Antic::ScanLine (the complex and touchy one)
-  // Generates one scan line of a mode line
-  // screen is the start of the target scanline and has to be bumped by this function.
-  // Generate one scanline of the Antic display
-  // If nmi is true, then a DLI has to generated.
-  // modeline is the mode line generator for this scanline.
-  // fillin is where the playfield data shall go. It may be offset to screen.
-  // width is the number of pixels the modeline shall fill in, shift the
-  // shift offset. 
-  // displayline is the number of the scanline within the modeline this method
-  // generates.
-  // Emulation here starts at value zero of the "horizontal register" as defined
-  // by the technical manual of Antic, sheet 5. The horizontal register itself
-  // counts half color clocks, similar to to our pixel based emulation.
-  // Measurements show that the DLI reaches the CPU about 8 cycles after the
-  // STA WSYNC position at hpos = 208. That fits well to the hypothesis that
-  // a NMI is generated at hpos = 0 since we have 228 half color clocks.
-  void Scanline(bool nmi,struct ModeLine *mode,
-		UBYTE *fillin,int width,bool scroll,int displayline,int first);
+  //
+  // Load data from the playfield into the scanline buffer
+  void FetchPlayfield(struct ModeLine *mode,struct DMAGenerator *dma);
+  //
+  // Fetch the player-missile graphics
+  void FetchPlayerMissiles(void);
   //
   // Generate a complete modeline.
-  void Modeline(int ir,int first,int last,int nlines,struct ModeLine *gen);
-  //
-  // Re-generate a modeline if CHBase/CHAttr changed in the middle.
-  void RegenerateModeline(void);
+  void Modeline(int ir,int vscroll,int nlines,struct ModeLine *gen);
   //
   // Prototypes for the antic read byte implementations
   UBYTE VCountRead(void);          // Read the vertical counter
@@ -394,7 +440,7 @@ private:
   // The following methods implement reading and writing from custom
   // chip addresses
   virtual UBYTE ComplexRead(ADR mem);
-  virtual bool ComplexWrite(ADR mem,UBYTE val);
+  virtual void  ComplexWrite(ADR mem,UBYTE val);
   //
   // Implementation of the HBI activity.
   virtual void HBI(void);
@@ -417,41 +463,6 @@ public:
   //
   // Start the special Reset Key NMI that is only available at the Atari800 and Atari400.
   void ResetNMI(void);
-  //
-  // Private for GTIA: Read Player DMA data
-  void PlayerDMAChannel(int player,int delay,UBYTE &target)
-  {
-    if (DMACtrlShadow & 0x08) {
-      target = UBYTE(Ram->ReadByte(PMActive->PlayerBase[player]
-				   + ((YPos - delay) >> PMActive->YPosShift)));
-    } else {
-      // Interesting side case: If Antic DMA is off, then GTIA does not fetch data
-      // from the bus (Test: Basic BUNDES.BAS)
-      if (DMACtrlShadow & 0x20) {
-	// Otherwise: Return random bus noise
-	target = BusNoise[player];
-      }
-    }
-  }
-  //
-  // Private for GTIA: Read Missile DMA data
-  void MissileDMAChannel(int delay,UBYTE &target)
-  {
-    if (DMACtrlShadow & 0x0c) {
-      // Missile DMA is turned on if player DMA is available.
-      // Test case: POP-Demo, graphics part. (POP.BAS)
-      target = UBYTE(Ram->ReadByte(PMActive->MissileBase
-				   + (YPos >> PMActive->YPosShift) 
-				   - delay));
-    } else {
-      // Interesting side case: If Antic DMA is off, then GTIA does not fetch data
-      // from the bus (Test: Basic BUNDES.BAS)
-      if (DMACtrlShadow & 0x20) {
-	// random bus noise if no DMA channel allocated for it
-	target = BusNoise[4];
-      }
-    }
-  }
   //
   // Return the current YPos
   int CurrentYPos(void) 
@@ -476,7 +487,7 @@ public:
     return AnticPCShadow;
   }
   //
-  // Return the width of the display in Gr.0 characters
+  // Return the width of the display in Mode 2 characters
   int CharacterWidth(void) const
   {
     if (DMACtrl & 0x20) {

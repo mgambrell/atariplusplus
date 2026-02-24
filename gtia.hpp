@@ -2,7 +2,7 @@
  **
  ** Atari++ emulator (c) 2002 THOR-Software, Thomas Richter
  **
- ** $Id: gtia.hpp,v 1.54 2008/05/08 13:22:29 thor Exp $
+ ** $Id: gtia.hpp,v 1.65 2013-01-14 12:54:11 thor Exp $
  **
  ** In this module: GTIA graphics emulation
  **********************************************************************************/
@@ -24,6 +24,7 @@
 
 /// Forward declarations
 class Monitor;
+class PostProcessor;
 ///
 
 /// Class GTIA
@@ -57,46 +58,6 @@ public:
   // Packed RGB color value for true color output
   typedef AtariDisplay::PackedRGB PackedRGB;
   //
-  // The colormap of the GTIA: Since it is created by the GTIA for the
-  // real hardware, the colormap is also defined here.
-  struct ColorEntry {
-    UBYTE                   alpha,red,green,blue;
-    AtariDisplay::PackedRGB packed;
-    //
-    // Pack the contents of the rgb values into a LONG as X requires it,
-    // return it.
-    PackedRGB XPackColor(void) const 
-    {
-      return packed;
-    }
-    //
-    // Mix this color with the color passed in and return it as packed
-    // array.
-    PackedRGB XMixColor(const struct ColorEntry &o) const
-    {
-      // The quick'n dirty method with less precision...
-      return ((packed & 0xfefefefe) + (o.packed & 0xfefefefe)) >> 1;
-      /*
-      return ((((LONG)(red   + o.red  ) & ~1UL)<<15) | 
-	      (((LONG)(green + o.green) & ~1UL)<<7)  | 
-	      (((LONG)(blue  + o.blue)        )>>1));
-      */
-    }    
-    // Mix this color with the two other color passed in and return it as packed
-    // array. The third color has the double weight (intentionally)
-    PackedRGB XMixColor(const struct ColorEntry &o1,const struct ColorEntry &o2) const
-    {
-      // The quick'n dirty method with less precision.
-      return (((((packed & 0xfefefefe) + (o1.packed & 0xfefefefe)) >> 1) & 0xfefefefe) + 
-	      (o2.packed & 0xfefefefe)) >> 1;
-
-      /*
-      return ((((LONG)(red   + o1.red   + o2.red   + o2.red)   & ~3UL)<<14) | 
-	      (((LONG)(green + o1.green + o2.green + o2.green) & ~3UL)<<6)  | 
-	      (((LONG)(blue  + o1.blue  + o2.blue  + o2.blue)        )>>2));
-      */
-    }
-  };
 private:
   // Color maps for PAL and NTSC follow here.
   static const struct ColorEntry PALColorMap[256];
@@ -137,7 +98,7 @@ private:
     // PM_XPos, you get these figures, though. Both are inclusive.
     // This happens by simply clipping P/M graphics to the borders below.
     static const int Player_Left_Border  INIT(4);
-    static const int Player_Right_Border INIT(378);
+    static const int Player_Right_Border INIT(380);
     // Collision registers. There's no need to mirror the precise
     // hardware registers. We keep all the stuff here and extract 
     // the information as soon as needed.
@@ -171,11 +132,64 @@ private:
       CollisionPlayfield = 0;
       DecodedPosition    = -64;
     }
-    // Render the object into the target
-    void Render(UBYTE *target);
+    // Render the object into the target, possibly remove the leftmost n
+    // bits because they are already on the screen.
+    void Render(UBYTE *target,int bitsize,UBYTE graf,int deltapos = 0,int deltabits = 0);
     //
-    // Remove the indicated object from the scan line again.
-    void Remove(UBYTE *target);
+    // Render the object with the data in its graphics register.
+    void Render(UBYTE *target,int bitsize)
+    {
+      Render(target,bitsize,Graphics);
+    }
+    //
+    // Remove all objects right to the indicated half color clock.
+    // Bitsize is the size of the object in bits in the graphics shift register.
+    void RemoveRightOf(UBYTE *target,int bitsize,int retrigger);
+    //
+    // Reposition an object. Bitsize is the size of
+    // the object in bits (8 for players, 2 for missiles), val
+    // the new horizontal position, retrigger the earliest
+    // possible retrigger position.
+    void RetriggerObject(UBYTE *target,int bitsize,UBYTE val,int retrigger);
+    //
+    // Update the size register while the object is on the screen.
+    // Arguments are the render target buffer, the size of the object
+    // in bits occupied in its shift register, the new value of the
+    // shift scaler as raw value, and the screen position in half
+    // color clocks where the change should take place.
+    void RetriggerSize(UBYTE *target,int bitsize,UBYTE val,int retrigger);
+    //
+    // Reposition the object without drawing it.
+    void RepositionObject(UBYTE val)
+    {
+      HPos            = val;
+      DecodedPosition = (val - 0x20) << 1;
+    }
+    //
+    // Resize the object without actually drawing it.
+    void ResizeObject(UBYTE val)
+    { 
+      Size = val & 0x03;
+      
+      switch(val & 0x03) {
+      case 0:
+      case 2:
+	DecodedSize = 0;
+	break;
+      case 1:
+	DecodedSize = 1;
+	break;
+      case 3:
+	DecodedSize = 2;
+	break;
+      }
+    }
+    //
+    // Change the shape of the object.
+    void ReshapeObject(UBYTE val)
+    {
+      Graphics = val;
+    }
     //
   }     Player[4],Missile[4]; // four players, for missiles
   //
@@ -380,9 +394,7 @@ private:
 				      private virtual IntermediateResolverUnfiddled
   {
   public:
-    DisplayGenerator80Unfiddled(class GTIA *parent)
-      : DisplayGenerator80Base(parent)
-    { }
+    DisplayGenerator80Unfiddled(class GTIA *parent);
   };  
   class DisplayGenerator80Fiddled : public DisplayGenerator80Base,
 				    private virtual IntermediateResolverFiddled
@@ -445,104 +457,6 @@ private:
   // The current mode
   class DisplayGeneratorBase                *CurrentGenerator;
   //
-  // Display post processing engines for filtering and similar effects.
-  class PostProcessor {
-  protected:
-    // Pointer to the machine (unused)
-    class Machine           *machine;
-    // Pointer to the display we output data to
-    class AtariDisplay      *display;  
-    // Pointer to the current color map.
-    const struct ColorEntry *ColorMap;
-    //
-    // Constructor: Not from here, use derived
-    // classes.
-    PostProcessor(class Machine *mach,const struct ColorEntry *colormap);
-    //
-  public:    
-    virtual ~PostProcessor(void) = 0;
-    //
-    // What this is good for: Post-process the line and push it into
-    // the display.
-    virtual void PushLine(UBYTE *in,int size) = 0;
-    //
-    // Reset the postprocessor.
-    virtual void Reset(void) = 0;
-  };
-  //
-  // Several post processors:
-  // PAL color bluring.
-  class PALColorBlurer : public PostProcessor, private VBIAction {
-    //
-    // Pointer to the previous line.
-    UBYTE *PreviousLine;  
-    //
-    // Activity on a frame change. Not much happens here except that we reset the
-    // internal frame buffers for vertical display post processing.
-    virtual void VBI(class Timer *,bool,bool);
-  public:
-    PALColorBlurer(class Machine *mach,const struct ColorEntry *colormap);
-    ~PALColorBlurer(void);
-    //
-    //
-    // What this is good for: Post-process the line and push it into
-    // the display.
-    virtual void PushLine(UBYTE *in,int size);
-    //
-    // Reset the postprocessor.
-    virtual void Reset(void);
-  };
-  //
-  // Flickerfixer: Combines two frames into one
-  class FlickerFixer : public PostProcessor, private VBIAction {
-    //
-    // Pointer to the previous frame.
-    UBYTE *PreviousFrame;  
-    // And the row within the previous frame.
-    UBYTE *PreviousRow;
-    //
-    // Activity on a frame change. Not much happens here except that we reset the
-    // internal frame buffers for vertical display post processing.
-    virtual void VBI(class Timer *,bool,bool);
-  public:
-    FlickerFixer(class Machine *mach,const struct ColorEntry *colormap);
-    ~FlickerFixer(void);
-    //
-    //
-    // What this is good for: Post-process the line and push it into
-    // the display.
-    virtual void PushLine(UBYTE *in,int size);
-    //
-    // Reset the postprocessor.
-    virtual void Reset(void);
-  };
-  //
-  // Flickerfixer and PAL blurer: Combination of the two above
-  class PALFlickerFixer : public PostProcessor, private VBIAction {
-    //
-    // Pointer to the previous line of the same frame.
-    UBYTE *PreviousLine;
-    // Pointer to the previous frame.
-    UBYTE *PreviousFrame;  
-    // And the row within the previous frame.
-    UBYTE *PreviousRow;
-    //
-    // Activity on a frame change. Not much happens here except that we reset the
-    // internal frame buffers for vertical display post processing.
-    virtual void VBI(class Timer *,bool,bool);
-  public:
-    PALFlickerFixer(class Machine *mach,const struct ColorEntry *colormap);
-    ~PALFlickerFixer(void);
-    //
-    //
-    // What this is good for: Post-process the line and push it into
-    // the display.
-    virtual void PushLine(UBYTE *in,int size);
-    //
-    // Reset the postprocessor.
-    virtual void Reset(void);
-  };
-  //
   // Current post-processor, if any.
   class PostProcessor        *PostProcessor;
   //
@@ -603,20 +517,23 @@ private:
   // Quick color lookup registers for the priority engine. This is indexed
   // by a bitmask set by the individual player/missile presence. Bit 0 is
   // player 0 and so on. PM-Graphics comes in two layers: Player 0,1 and
-  // Player 2,3.
+  // Player 2,3. Bit 4 is reserved for player 5, the missiles combined.
 #ifdef HAS_MEMBER_INIT
-  static const int PlayerColorLookupSize = 16;
+  static const int PlayerColorLookupSize = 32;
 #else
-#define            PlayerColorLookupSize   16
+#define            PlayerColorLookupSize   32
 #endif
   PreComputedColor Player0ColorLookup[PlayerColorLookupSize];
   PreComputedColor Player2ColorLookup[PlayerColorLookupSize];
+  PreComputedColor Player4ColorLookup[PlayerColorLookupSize];
   //
   // Pre-computed colors of players in front of the given playfields.
   PreComputedColor Player0ColorLookupPF01[PlayerColorLookupSize];
   PreComputedColor Player2ColorLookupPF01[PlayerColorLookupSize];
+  PreComputedColor Player4ColorLookupPF01[PlayerColorLookupSize];
   PreComputedColor Player0ColorLookupPF23[PlayerColorLookupSize];
   PreComputedColor Player2ColorLookupPF23[PlayerColorLookupSize];
+  PreComputedColor Player4ColorLookupPF23[PlayerColorLookupSize];
   //
   // Playfield priority masks for playfields 0,1 and playfields 2,3
   UBYTE            Playfield01Mask[PlayerColorLookupSize];
@@ -647,7 +564,8 @@ private:
   bool ColPF1FiddledArtifacts; // If true, then emulate color artifacts.
   bool NTSC;                   // If true, we are running an NTSC GTIA
   LONG PMReaction;             // Number of half-color clocks required as pre-fetch for the Player logic.
-  LONG PMRelease;              // Ditto for releasing the channel.
+  LONG PMResize;               // Ditto for resizing the channel.
+  LONG PMShape;                // Ditto for writing the graphics register.
   bool PALColorBlur;           // blur colors of the same hue at adjacent lines
   bool AntiFlicker;            // flicker fixer enabled.
   enum {
@@ -701,7 +619,7 @@ private:
   //
   // Reading and writing bytes to GTIA
   virtual UBYTE ComplexRead(ADR mem);
-  virtual bool ComplexWrite(ADR mem,UBYTE val);  
+  virtual void  ComplexWrite(ADR mem,UBYTE val);  
   //
   // Various register access functions
   UBYTE ConsoleRead(void);              // read console switches
@@ -773,7 +691,7 @@ public:
   //
   // If fiddling is turned on, then the mentioned display uses color fiddling and
   // requires special handling for collision detection and color creation.
-  void TriggerGTIAScanline(UBYTE *playfield,int pmdisplace,int width,bool fiddling);
+  void TriggerGTIAScanline(UBYTE *playfield,UBYTE *player,int width,bool fiddling);
   //
   // Parse off command line arguments here.
   virtual void ParseArgs(class ArgParser *arg);

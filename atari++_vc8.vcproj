@@ -515,6 +515,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\cartoss8k.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\cartossb.cpp"
 				>
 			</File>
@@ -571,6 +575,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\colorentry.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\configurable.cpp"
 				>
 			</File>
@@ -588,6 +596,10 @@
 			</File>
 			<File
 				RelativePath=".\dcmimage.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\debugadrspace.cpp"
 				>
 			</File>
 			<File
@@ -664,6 +676,10 @@
 			</File>
 			<File
 				RelativePath=".\flashpage.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\flickerfixer.cpp"
 				>
 			</File>
 			<File
@@ -835,6 +851,14 @@
 				>
 			</File>
 			<File
+				RelativePath=".\palcolorblurer.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\palflickerfixer.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\patch.cpp"
 				>
 			</File>
@@ -852,6 +876,10 @@
 			</File>
 			<File
 				RelativePath=".\pokey.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\postprocessor.cpp"
 				>
 			</File>
 			<File
@@ -1209,6 +1237,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\cartoss8k.hpp"
+				>
+			</File>
+			<File
 				RelativePath=".\cartossb.hpp"
 				>
 			</File>
@@ -1285,6 +1317,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\debugadrspace.hpp"
+				>
+			</File>
+			<File
 				RelativePath=".\device.hpp"
 				>
 			</File>
@@ -1358,6 +1394,10 @@
 			</File>
 			<File
 				RelativePath=".\flashpage.hpp"
+				>
+			</File>
+			<File
+				RelativePath=".\flickerfixer.hpp"
 				>
 			</File>
 			<File
@@ -1529,6 +1569,14 @@
 				>
 			</File>
 			<File
+				RelativePath=".\palcolorblurer.hpp"
+				>
+			</File>
+			<File
+				RelativePath=".\palflickerfixer.hpp"
+				>
+			</File>
+			<File
 				RelativePath=".\patch.hpp"
 				>
 			</File>
@@ -1546,6 +1594,10 @@
 			</File>
 			<File
 				RelativePath=".\pokey.hpp"
+				>
+			</File>
+			<File
+				RelativePath=".\postprocessor.hpp"
 				>
 			</File>
 			<File
