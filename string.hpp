@@ -104,9 +104,6 @@ inline static void *memset(void *s, int c, size_t n) throw()
 ///
 
 /// Check for availibility of strcasecmp and implement it if it does not exist.
-#ifdef _WIN32
-# define strcasecmp(a,b) stricmp((a),(b))
-#endif
 #if !HAVE_STRCASECMP
 #include <ctype.h>
 #ifdef HAS_NOEXCEPT
@@ -128,9 +125,6 @@ inline static int strcasecmp(const char *s1, const char *s2) throw()
 ///
 
 /// Check for the availability of strncasecmp and implement itif it does not exist.
-#ifdef _WIN32
-# define strncasecmp(a,b,n) _strnicmp((a),(b),(n))
-#endif
 #if !HAVE_STRNCASECMP
 #include <ctype.h>
 #ifdef HAS_NOEXCEPT
