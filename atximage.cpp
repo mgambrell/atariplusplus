@@ -2,7 +2,7 @@
  **
  ** Atari++ emulator (c) 2002 THOR-Software, Thomas Richter
  **
- ** $Id: atximage.cpp,v 1.12 2020/03/21 20:51:44 thor Exp $
+ ** $Id: atximage.cpp,v 1.15 2020/04/05 16:49:36 thor Exp $
  **
  ** In this module: Disk image class for .atx images.
  **********************************************************************************/
@@ -18,7 +18,7 @@
 /// Defines
 // Number of 15kHz intervals for moving the drive head by one track (estimated, need to measure)
 #define LinesPerTrack 150
-#define MusecsPerTrack 10000 // 10ms
+#define MusecsPerTrack 50000 // 10ms
 // Settle delay before reading is attempted
 #define LinesPerSettle 300
 #define MusecsPerSettle 20000 // 20ms
@@ -26,17 +26,15 @@
 #define LinesPerByte 8
 // One line takes approximately 1/15000 seconds, which makes 67usecs roughly
 #define MuSecsPerLine 67
-// Number of lines per rotation, approximated from 288rpms.
-#define LinesPerRotation 3125
 // Number of musecs per rotation
-#define MusecsPerRotation 208336
+#define MusecsPerRotation 210107
 ///
 
 /// ATXImage::ATXImage
 ATXImage::ATXImage(class Machine *mach)
   : DiskImage(mach), HBIAction(mach),
     Image(NULL),
-    Protected(false), CRCError(false), LostDataError(false), SectorMissing(false),
+    Protected(false), CRCError(false), LostDataError(false), SectorMissing(false), SectorDeleted(false),
     TrackUnderHead(0), SectorsPerTrack(18), DefaultSectorSize(128), HeadPosition(0),
     TrackList(NULL)
 {
@@ -63,6 +61,7 @@ void ATXImage::Reset(void)
   CRCError        = false;
   LostDataError   = false;
   SectorMissing   = false;
+  SectorDeleted   = false;
   TrackUnderHead  = 0;
   HeadPosition    = 0;
 }
@@ -92,6 +91,7 @@ void ATXImage::OpenImage(class ImageStream *image)
   CRCError        = false;
   LostDataError   = false;
   SectorMissing   = false;
+  SectorDeleted   = false;
   //
   // Default is SD
   SectorsPerTrack   = 18;
@@ -204,6 +204,7 @@ void ATXImage::OpenImage(class ImageStream *image)
 	ULONG sectorlist;
 	UBYTE sectorlistheader[8];
 	UBYTE idx   = 0;
+	UBYTE ext   = 0;
 	struct Track::Sector *lastsector = NULL;
 	//
 	if (!image->Read(trackdata,sectorlistheader,sizeof(sectorlistheader)))
@@ -257,6 +258,9 @@ void ATXImage::OpenImage(class ImageStream *image)
 	  sector->HeaderOffset   = sectorlist;
 	  sector->Track          = track;
 	  //
+	  // Add up sectors with extensions.
+	  if (sectorstatus & Track::Sector::Extended)
+	    ext++;
 	  //
 	  // How do I get the sector size in bytes???
 	  if (sectorstatus & Track::Sector::Missing) {
@@ -302,7 +306,7 @@ void ATXImage::OpenImage(class ImageStream *image)
 	// best-effort method to check whether the data is correct,
 	// and there is a sector to assign it to.
 	sectorend  = trackend;
-	while(sectorend > trackstart) {
+	while(ext && sectorend > trackstart) {
 	  UBYTE extendeddata[1+4+1+2];
 	  bool found = false;
 	  // Check whether the data here is an extended sector data.
@@ -317,6 +321,15 @@ void ATXImage::OpenImage(class ImageStream *image)
 	      sectorend -= sizeof(extendeddata);
 	      continue;
 	    }
+	  }
+	  if (sectorend == trackend &&
+	      extendeddata[0] == 0 && extendeddata[1] == 0 && 
+	      extendeddata[2] == 0 && extendeddata[3] == 0 &&
+	      extendeddata[4] == 0 && extendeddata[5] == 0 && 
+	      extendeddata[6] == 0 && extendeddata[7] == 0) {
+	    // Sometimes, the format smuggles a zero extended data as trailer in here.
+	    sectorend -= sizeof(extendeddata);
+	    continue;
 	  }
 	  if (extendeddata[0] == 0x08) {
 	    struct Track::Sector *sector;
@@ -350,6 +363,7 @@ void ATXImage::OpenImage(class ImageStream *image)
 		}
 	      }
 	    }
+	    ext--;
 	  }
 	  //
 	  // If a valid sector extension has been found, try to locate the next
@@ -383,6 +397,12 @@ void ATXImage::OpenImage(class ImageStream *image)
 	      if (sectorend > sector->Offset) {
 		if (sectorend - sector->Offset < sector->SectorSize) {
 		  sector->SectorSize = UWORD(sectorend - sector->Offset);
+		  // If this is just a difference of 8, then assume that this
+		  // was a dummy extended data at the end.
+		  if (sector->SectorSize == 128 + 8)
+		    sector->SectorSize = 128;
+		  if (sector->SectorSize == 256 + 8)
+		    sector->SectorSize = 256;
 #if CHECK_LEVEL > 0
 		  if (sector->SectorSize != 128)
 		    printf("Found wierd sector size of %d at track %d, sector %d\n",
@@ -586,6 +606,8 @@ UBYTE ATXImage::Status(void)
     status |= DiskImage::LostData | DiskImage::DRQ; // also: request but CPU did not react.
   if (SectorMissing)
     status |= DiskImage::NotFound;
+  if (SectorDeleted)
+    status |= DiskImage::Deleted;
 
   return status;
 }
@@ -609,8 +631,8 @@ UBYTE ATXImage::ReadSector(UWORD sectornumber,UBYTE *buffer,UWORD &delay)
   sector = FindSector(sectornumber,&delay); 
   //
   // Update the FDC hardware flags
-  SectorMissing = (sector == NULL || (sector->SectorStatus & (Track::Sector::Missing |
-							      Track::Sector::NoRecord)));
+  SectorMissing = (sector == NULL || (sector->SectorStatus & Track::Sector::Missing));
+  SectorDeleted = (sector)?((sector->SectorStatus & Track::Sector::NoRecord)?true:false):(false);
   CRCError      = (sector)?((sector->SectorStatus & Track::Sector::CRCError)?true:false):(false);
   LostDataError = (sector)?((sector->SectorStatus & Track::Sector::LostData)?true:false):(false);
   //
@@ -665,6 +687,7 @@ UBYTE ATXImage::WriteSector(UWORD sectornumber,const UBYTE *buffer,UWORD &delay)
   sector = FindSector(sectornumber,&delay);
   //
   SectorMissing = (sector == NULL || (sector->SectorStatus & Track::Sector::Missing));
+  SectorDeleted = (sector)?((sector->SectorStatus & Track::Sector::NoRecord)?true:false):(false);
   CRCError      = (sector)?((sector->SectorStatus & Track::Sector::CRCError)?true:false):(false);
   LostDataError = (sector)?((sector->SectorStatus & Track::Sector::LostData)?true:false):(false);
   //

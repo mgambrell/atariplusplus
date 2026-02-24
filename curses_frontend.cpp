@@ -2,7 +2,7 @@
  **
  ** Atari++ emulator (c) 2002 THOR-Software, Thomas Richter
  **
- ** $Id: curses_frontend.cpp,v 1.10 2015/05/21 18:52:38 thor Exp $
+ ** $Id: curses_frontend.cpp,v 1.12 2022/12/20 18:01:33 thor Exp $
  **
  ** In this module: A frontend using the curses library for text output
  **********************************************************************************/
@@ -165,8 +165,10 @@ void Curses_FrontEnd::AnalyzeDisplay(void)
       switch(ir & 0x0f) {
       case 5:
 	lines += 6; // plus eight with the +2 below.
+	// Falls through.
       case 3:
 	lines += 2;
+	// Falls through.
       case 2:
       case 4:
 	lines += 8;
@@ -178,7 +180,7 @@ void Curses_FrontEnd::AnalyzeDisplay(void)
 	// comes into play.
 	if (ir & 0x10) {
 	  src     = display + 4 - ((Antic->HScrollOffset() & 0x0f) >> 2);
-	  display = (display & 0xf000) | ((display + (width == 48)?(48):(width + 8)) & 0x0fff);
+	  display = (display & 0xf000) | ((display + ((width == 48)?(48):(width + 8))) & 0x0fff);
 	} else {
 	  src     = display;
 	  display = (display & 0xf000) | ((display +  width) & 0x0fff);
@@ -221,6 +223,7 @@ void Curses_FrontEnd::AnalyzeDisplay(void)
 	break;
       case 7:
 	lines += 8;
+	// Falls through.
       case 6:
 	lines += 8;
 	// 8x8 and 8x16 character cells, both handled alike here, but pixels are one
@@ -232,7 +235,7 @@ void Curses_FrontEnd::AnalyzeDisplay(void)
 	// comes into play.
 	if (ir & 0x10) {
 	  src     = display + 2 - ((Antic->HScrollOffset() & 0x0f) >> 3);
-	  display = (display & 0xf000) | ((display + (width == 48)?(24):((width + 8) >> 1)) & 0x0fff);
+	  display = (display & 0xf000) | ((display + ((width == 48)?(24):((width + 8) >> 1))) & 0x0fff);
 	} else {
 	  src     = display;
 	  display = (display & 0xf000) | ((display + (width >> 1)) & 0x0fff);
@@ -273,33 +276,37 @@ void Curses_FrontEnd::AnalyzeDisplay(void)
 	break;
       case 8:
 	lines += 4;
+	// Falls through.
       case 9:
 	lines += 4;
 	if (ir & 0x10) {
-	  display = (display & 0xf000) | ((display + (width == 48)?(12):((width + 8) >> 2)) & 0x0fff);
+	  display = (display & 0xf000) | ((display + ((width == 48)?(12):((width + 8) >> 2))) & 0x0fff);
 	} else {
 	  display = (display & 0xf000) | ((display + (width >> 2)) & 0x0fff);
 	}
 	break;
       case 10:
 	lines += 2;
+	// Falls through.
       case 11:
 	lines += 1;
+	// Falls through.
       case 12:
 	lines += 1;
 	if (ir & 0x10) {
-	  display = (display & 0xf000) | ((display + (width == 48)?(24):((width + 8) >> 1)) & 0x0fff);
+	  display = (display & 0xf000) | ((display + ((width == 48)?(24):((width + 8) >> 1))) & 0x0fff);
 	} else {
 	  display = (display & 0xf000) | ((display + (width >> 1)) & 0x0fff);
 	}
 	break;	
       case 13:
 	lines += 1;
+	// Falls through.
       case 14:
       case 15:
 	lines += 1;
 	if (ir & 0x10) {
-	  display = (display & 0xf000) | ((display + (width == 48)?(24):((width + 8) >> 1)) & 0x0fff);
+	  display = (display & 0xf000) | ((display + ((width == 48)?(24):((width + 8) >> 1))) & 0x0fff);
 	} else {
 	  display = (display & 0xf000) | ((display + (width >> 1)) & 0x0fff);
 	}

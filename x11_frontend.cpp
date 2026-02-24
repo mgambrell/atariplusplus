@@ -2,7 +2,7 @@
  **
  ** Atari++ emulator (c) 2002 THOR-Software, Thomas Richter
  **
- ** $Id: x11_frontend.cpp,v 1.88 2020/03/28 14:05:58 thor Exp $
+ ** $Id: x11_frontend.cpp,v 1.90 2022/12/20 18:01:33 thor Exp $
  **
  ** In this module: A simple X11 frontend without further GUI
  **********************************************************************************/
@@ -64,7 +64,7 @@ static int ErrorHandler(Display *, XErrorEvent *ev)
 X11_FrontEnd::X11_FrontEnd(class Machine *mach,int unit)
   : XFront(mach,unit), visual(NULL), depth(0), defcolormap(0), custommap(0), 
     colormap(NULL), framebuffer(NULL), root(0),
-    isinit(false), ismapped(false), dump(false), grab(false), isgrabbed(false), havefocus(false), 
+    isinit(false), ismapped(false), dump(false), isgrabbed(false), havefocus(false), 
     truecolor(false), showcursor(true), button(false), dumpcnt(1), scrolledlines(0),
     LeftEdge(unit?0:16), TopEdge(0), 
     Width(unit?80*8:Antic::WindowWidth), Height(unit?25*8:Antic::WindowHeight),
@@ -1169,13 +1169,13 @@ void X11_FrontEnd::DisplayStatus(class Monitor *mon)
 		   "\tSyncX                 : %s\n"
 		   "\tScreen dump base name : %s\n"
 		   "\tIndirect rendering    : %s\n"
-		   "\tPixel width           : " LD "\n"
-		   "\tPixel height          : " LD "\n"
+		   "\tPixel width           : " ATARIPP_LD "\n"
+		   "\tPixel height          : " ATARIPP_LD "\n"
 		   "\tTrue color display    : %s\n"
-		   "\tLeftEdge              : " LD "\n"
-		   "\tTopEdge               : " LD "\n"
-		   "\tWidth                 : " LD "\n"
-		   "\tHeight                : " LD "\n",
+		   "\tLeftEdge              : " ATARIPP_LD "\n"
+		   "\tTopEdge               : " ATARIPP_LD "\n"
+		   "\tWidth                 : " ATARIPP_LD "\n"
+		   "\tHeight                : " ATARIPP_LD "\n",
 		   PrivateCMap?("on"):("off"),
 		   SyncX?("on"):("off"),
 		   PictureBaseName,		   

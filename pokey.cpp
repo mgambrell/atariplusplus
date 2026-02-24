@@ -2,7 +2,7 @@
  **
  ** Atari++ emulator (c) 2002 THOR-Software, Thomas Richter
  **
- ** $Id: pokey.cpp,v 1.142 2016/12/05 21:04:20 thor Exp $
+ ** $Id: pokey.cpp,v 1.144 2022/12/20 18:01:33 thor Exp $
  **
  ** In this module: Pokey emulation 
  **
@@ -1559,7 +1559,7 @@ void Pokey::STimerWrite(void)
     Ch[0].DivNCnt -= 3;
     Ch[0].DivNIRQ -= 3;
   }
-  if ((AudioCtrl & 0x28) == 0x38) {
+  if ((AudioCtrl & 0x28) == 0x28) {
     // 1.79 Mhz clock on channel 2 also driving channel 3.
     Ch[0].DivNCnt -= 3;
     Ch[0].DivNIRQ -= 3;
@@ -1831,8 +1831,8 @@ void Pokey::DisplayStatus(class Monitor *mon)
 		   "\tMax0    : %04x\tMax1    : %04x\tMax2    : %04x\tMax3      : %04x\n"
 		   "\tAudioCtrl : %02x\tSkStat    : %02x\tSkCtrl    : %02x\tKeyCode   : %02x\n"
 		   "\tIRQStat   : %02x\tIRQEnable : %02x\n"
-		   "\tSerInDly  : " LD "\tSerOutDly : " LD "\tSerXmtDly : " LD "\n"
-		   "\tSerInCnt  : " LD "\tSerOutCnt : " LD "\tSerXmtCnt : " LD "\n"
+		   "\tSerInDly  : " ATARIPP_LD "\tSerOutDly : " ATARIPP_LD "\tSerXmtDly : " ATARIPP_LD "\n"
+		   "\tSerInCnt  : " ATARIPP_LD "\tSerOutCnt : " ATARIPP_LD "\tSerXmtCnt : " ATARIPP_LD "\n"
 		   "\tSerInBytes: %d\tSerInData : %c%c\n",
 		   Unit,
 		   Ch[0].AudioF,Ch[1].AudioF,Ch[2].AudioF,Ch[3].AudioF,

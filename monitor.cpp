@@ -2,7 +2,7 @@
  **
  ** Atari++ emulator (c) 2002 THOR-Software, Thomas Richter
  **
- ** $Id: monitor.cpp,v 1.103 2016/11/10 20:12:53 thor Exp $
+ ** $Id: monitor.cpp,v 1.111 2022/12/20 18:01:33 thor Exp $
  **
  ** In this module: Definition of the built-in monitor
  **********************************************************************************/
@@ -318,7 +318,7 @@ const struct Monitor::Symbol *Monitor::Symbol::FindSymbol(const struct Symbol *l
 	else
 	  continue;
 	break;
-      case Any:
+      case All:
 	score += 5;
 	break;
       case PreferZeroPage:
@@ -683,34 +683,12 @@ Monitor::HistoryLine::HistoryLine(const char *line)
 }
 ///
 
-/// Monitor::HistoryLine::~HistoryLine
-Monitor::HistoryLine::~HistoryLine(void)
-{
-  delete[] Line;
-  Remove();
-}
-///
-
 /// Monitor::History::History
 // Constructor of the history: Just constructs the
 // list.
 Monitor::History::History(void)
   : HistorySize(0), ActiveLine(NULL)
 {
-}
-///
-
-/// Monitor::History::~History
-// Dispose the history again. Clears the list of lines
-// cached here, obviously.
-Monitor::History::~History(void)
-{    
-  struct HistoryLine *hl;
-
-  while((hl = First())) {
-    // History lines remove themselves from the history.
-    delete hl;
-  }
 }
 ///
 
@@ -1068,6 +1046,22 @@ void Monitor::VPrint(const char *fmt,va_list args) const
 }
 ///
 
+/// Monitor::WaitKey
+// Wait for the user to print any key to continue.
+void Monitor::WaitKey(void)
+{
+  Print("<Press RETURN to continue>\n");
+#ifdef USE_CURSES
+  int c;
+  do {
+    c = getch();
+  } while(c != KEY_ENTER && c != 0x0a && c != 0x0d && c != ' ');
+#else
+  fgetc(stdin);
+#endif
+}
+///
+
 /// Monitor::PrintCPUStatus
 // Print the CPU registers in human-readable form
 // this does less than a CPU->DisplayStatus
@@ -1152,7 +1146,7 @@ bool Monitor::Command::GetDefault(int &setting,int def,int min,int max)
 	valid   = true;
 	setting = value;
       } else {
-	Print(LD " is out of range, must be >= %d and <= %d.\n",value,min,max);
+	Print(ATARIPP_LD " is out of range, must be >= %d and <= %d.\n",value,min,max);
       }
     } else {
       Print("%s is not a valid number.\n",token);
@@ -1272,7 +1266,8 @@ int Monitor::Command::ReadDataLine(UBYTE *buffer,const char *prompt,char mode,bo
     return count;
   case 'D':
     base = 10;
-    // runs into the following. Base defaults to 16 otherwise.
+    // Base defaults to 16 otherwise.
+    // Intentionally falls through.
   case 'X':
     while(*input) {
       LONG value;
@@ -1284,9 +1279,9 @@ int Monitor::Command::ReadDataLine(UBYTE *buffer,const char *prompt,char mode,bo
 	  count++;
 	} else {
 	  if (base == 10) {
-	    Print("Input " LD " is not a valid byte.\n",value);
+	    Print("Input " ATARIPP_LD " is not a valid byte.\n",value);
 	  } else {
-	    Print("Input " LX " is not a valid byte.\n",(ULONG)(value));
+	    Print("Input " ATARIPP_LX " is not a valid byte.\n",(ULONG)(value));
 	  }
 	  return 0;
 	}
@@ -1313,14 +1308,6 @@ Monitor::Splt::Splt(class Monitor *mon,const char *lng,const char *shr,const cha
   : Command(mon,lng,shr,helper,'S'), 
     splitbuffer(NULL), splittmp(NULL), splitlines(0)
 { }
-///
-
-/// Monitor::Splt::~Splt
-Monitor::Splt::~Splt(void)
-{
-  delete[] splitbuffer;
-  delete[] splittmp;
-}
 ///
 
 /// Monitor::Splt::Apply
@@ -1469,7 +1456,7 @@ void Monitor::Eval::Apply(char e)
     if (token) {
       valid = monitor->EvaluateExpression(token,value);
       if (valid) {
-	Print("%s = 0x" LX " = " LD "\n",token,value,value);
+	Print("%s = 0x" ATARIPP_LX " = " ATARIPP_LD "\n",token,value,value);
       }
       return;
     }
@@ -1922,13 +1909,6 @@ Monitor::Step::Step(class Monitor *mon,const char *lng,const char *shr,const cha
 { }
 ///
 
-/// Monitor::Step::~Step
-Monitor::Step::~Step(void)
-{
-  delete[] lineaddresses;
-}
-///
-
 /// Monitor::Step::OpenDisplay
 // Create the optimized tracder display
 bool Monitor::Step::OpenDisplay(void)
@@ -2111,6 +2091,8 @@ bool Monitor::Step::MainLoop(void)
     case KEY_F(10):
     case 'n':
     case 'N':
+    case 't':
+    case 'T':
       // Next command.
       // Check the CPU command at the current address. If this is a branch instruction,
       // we continue until we arrive at a PC larger than the current address. Otherwise,
@@ -2341,7 +2323,8 @@ void Monitor::Stat::Apply(char e)
       Print("Unknown emulator component %s\n",token);
       return;
     }
-    MissingArg();  
+    MissingArg();
+    break;
   default:
     ExtInvalid();   
   }
@@ -2381,7 +2364,7 @@ void Monitor::Edit::Apply(char e)
       do {
 	UBYTE *p;
 	int   count;
-	char  adbuffer[8];
+	char  adbuffer[9];
 	UBYTE buffer[128];
 	//
 	sprintf(adbuffer,"$%04x : ",here);
@@ -2646,36 +2629,36 @@ void Monitor::SetR::Apply(char e)
     value     = 0;
     if (monitor->EvaluateExpression(valstr,value)) {
       if (value<0x0000 || value > 0xffff) {
-	Print("Register value " LX " out of range\n",(ULONG)value);
+	Print("Register value " ATARIPP_LX " out of range\n",(ULONG)value);
 	return;
       }
       if (!strcasecmp(setstr,"A")) {
 	if (value > 0xff) {
-	  Print("Register value " LX " out of range\n",(ULONG)value);
+	  Print("Register value " ATARIPP_LX " out of range\n",(ULONG)value);
 	  return;
 	}
 	monitor->cpu->A() = UBYTE(value);
       } else if (!strcasecmp(setstr,"X")) {
 	if (value > 0xff) {
-	  Print("Register value " LX " out of range\n",(ULONG)value);
+	  Print("Register value " ATARIPP_LX " out of range\n",(ULONG)value);
 	  return;
 	}
 	monitor->cpu->X() = UBYTE(value);
       } else if (!strcasecmp(setstr,"Y")) {
 	if (value > 0xff) {
-	  Print("Register value " LX " out of range\n",(ULONG)value);
+	  Print("Register value " ATARIPP_LX " out of range\n",(ULONG)value);
 	  return;
 	}
 	monitor->cpu->Y() = UBYTE(value);
       } else if (!strcasecmp(setstr,"S")) {
 	if (value > 0xff) {
-	  Print("Register value " LX " out of range\n",(ULONG)value);
+	  Print("Register value " ATARIPP_LX " out of range\n",(ULONG)value);
 	  return;
 	}
 	monitor->cpu->S() = UBYTE(value);
       } else if (!strcasecmp(setstr,"P")) {
 	if (value > 0xff) {
-	  Print("Register value " LX " out of range\n",(ULONG)value);
+	  Print("Register value " ATARIPP_LX " out of range\n",(ULONG)value);
 	  return;
 	}
 	monitor->cpu->P() = UBYTE(value);
@@ -2742,7 +2725,7 @@ ADR Monitor::Dlst::DisassembleLine(class AdrSpace *adr,ADR where,char *line)
   bool load    = false;
   bool waitvbr = false;
   char cmdname[20],prehex[20];
-  char options[40];
+  char options[33];
 
   inst    = adr->ReadByte(where);
   if (inst & 0x80) {
@@ -2813,10 +2796,10 @@ ADR Monitor::Dlst::DisassembleLine(class AdrSpace *adr,ADR where,char *line)
     strcat(options," DLI");
   
   if (load) {
-    sprintf(line,"%s %s @$%04x %s",prehex,cmdname,adr->ReadWord(where+1),options);
+    snprintf(line,80,"%s %s @$%04x %s",prehex,cmdname,adr->ReadWord(where+1),options);
     where += 3;
   } else {
-    sprintf(line,"%s %s %s",prehex,cmdname,options);
+    snprintf(line,80,"%s %s %s",prehex,cmdname,options);
     where++;
   }
 

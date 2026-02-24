@@ -2,7 +2,7 @@
  **
  ** Atari++ emulator (c) 2002 THOR-Software, Thomas Richter
  **
- ** $Id: alsasound.cpp,v 1.33 2020/03/28 14:05:58 thor Exp $
+ ** $Id: alsasound.cpp,v 1.38 2021/08/16 10:31:01 thor Exp $
  **
  ** In this module: Os interface towards sound output for the alsa sound system
  **********************************************************************************/
@@ -256,14 +256,12 @@ bool AlsaSound::InitializeDsp(void)
   }
   //
   // Narrow the configuration space for formats.
+  // Note: Apparently, some alsa backends do not support narrowing.
+  // Just ignore the error then...
   format = SND_PCM_FORMAT_S8;
-  if ((err = snd_pcm_hw_params_set_format_first(SoundStream,HWParms,&format)) < 0) {
-    ThrowAlsa(err,"AlsaSound::InitializeDsp","failed to narrow the format space");
-  }
+  snd_pcm_hw_params_set_format_first(SoundStream,HWParms,&format);
   format = SND_PCM_FORMAT_U16_BE;
-  if ((err = snd_pcm_hw_params_set_format_last(SoundStream,HWParms,&format)) < 0) {
-    ThrowAlsa(err,"AlsaSound::InitializeDsp","failed to narrow the format space");
-  }
+  snd_pcm_hw_params_set_format_last(SoundStream,HWParms,&format);
   //
   // Now query the format. We support quite some, but not all formats.
   // What happens if more than one format is available?
@@ -330,39 +328,37 @@ bool AlsaSound::InitializeDsp(void)
   }
   //
   // Hardware setup done. Now write the data back into the device.
-  if ((err = snd_pcm_hw_params(SoundStream,HWParms)) <0) {
-    ThrowAlsa(err,"AlsaSound::InitializeDsp","unable to define the hardware parameters");
-  }
+  // Apparently, this may also fail on some ^$?$!! devices.
+  snd_pcm_hw_params(SoundStream,HWParms);
   //
   // Setup the software buffering here.
   //
   // Get the current software parameters here.
-  if ((err = snd_pcm_sw_params_current(SoundStream,SWParms)) < 0) {
-    ThrowAlsa(err,"AlsaSound::InitializeDsp","unable to query the software parameters");
-  }
-  //
-  // Start the playback if the buffer is almost full.
-  if ((err = snd_pcm_sw_params_set_start_threshold(SoundStream,SWParms,(NumFrags - 2)<<FragSize)) < 0) {
-    ThrowAlsa(err,"AlsaSound::InitializeDsp","unable to set the playback start threshold");
-  }
-  //
-  // Set the wakeup point: Signal an error if less than this is available.
-  if ((err = snd_pcm_sw_params_set_avail_min(SoundStream,SWParms,1<<FragSize)) < 0) {
-    ThrowAlsa(err,"AlsaSound::InitializeDsp","unable to set the wakeup point");
-  }
-  //
-  /*
-  ** This is deprecated, and not even needed
-  // Align all transfers to one sample. I've no idea why this is useful.
-  if ((err = snd_pcm_sw_params_set_xfer_align(SoundStream,SWParms,1)) < 0) {
+  if ((err = snd_pcm_sw_params_current(SoundStream,SWParms)) >= 0) {
+    //
+    // Start the playback if the buffer is almost full.
+    if ((err = snd_pcm_sw_params_set_start_threshold(SoundStream,SWParms,(NumFrags - 2)<<FragSize)) < 0) {
+      ThrowAlsa(err,"AlsaSound::InitializeDsp","unable to set the playback start threshold");
+    }
+    //
+    // Set the wakeup point: Signal an error if less than this is available.
+    if ((err = snd_pcm_sw_params_set_avail_min(SoundStream,SWParms,1<<FragSize)) < 0) {
+      ThrowAlsa(err,"AlsaSound::InitializeDsp","unable to set the wakeup point");
+    }
+    //
+    /*
+    ** This is deprecated, and not even needed
+    // Align all transfers to one sample. I've no idea why this is useful.
+    if ((err = snd_pcm_sw_params_set_xfer_align(SoundStream,SWParms,1)) < 0) {
     ThrowAlsa(err,"AlsaSound::InitializeDsp","unable to set the transfer align to one");
-  }
-  **
-  */
-  //
-  // Write the parameters to the playback device now.
-  if ((err = snd_pcm_sw_params(SoundStream,SWParms)) < 0) {
-    ThrowAlsa(err,"AlsaSound::InitializeDsp","unable to write back the software parameters");
+    }
+    **
+    */
+    //
+    // Write the parameters to the playback device now.
+    if ((err = snd_pcm_sw_params(SoundStream,SWParms)) < 0) {
+      ThrowAlsa(err,"AlsaSound::InitializeDsp","unable to write back the software parameters");
+    }
   }
   //
   // Setup the effective buffering frequency.
@@ -423,24 +419,27 @@ void AlsaSound::AlsaCallBack(void)
       avail &= -(1L << FragSize);
       // Get the next buffer we want to play back.
       if (PlayingBuffer == NULL) {
+	struct AudioBufferBase *next = ReadyBuffers.First();
 	// No playing buffer. Pull a new one from the list of ready buffers.
-	PlayingBuffer = ReadyBuffers.RemHead();
-	if (PlayingBuffer == NULL) {
-	  // Ok, check whether we may launch pokey directly here. This might
-	  // be valid if the main thread is waiting in the VBI anyhow.	   
-	  assert(BufferedSamples == 0);
-	  //printf("AlsaCallBack based ");
-	  AdjustUnderrun();
-	  if (MayRunPokey) {
-	    //printf("Alsa buffer run out of data, must generate more now\n");
-	    GenerateSamples(avail);
-	    continue;
-	  } else {
-	    // Unfortunately, we cannot directly call pokey
-	    // here since we don't know the state of it and whether something
-	    // else is currently playing with it.
-	    return;
-	  }
+	if (next && next->FreeSamples() == 0) {
+	  next->Remove();
+	  PlayingBuffer = next;
+	}
+      }
+      if (PlayingBuffer == NULL) {
+	// Ok, check whether we may launch pokey directly here. This might
+	// be valid if the main thread is waiting in the VBI anyhow.	   
+	//printf("AlsaCallBack based ");
+	AdjustUnderrun();
+	if (MayRunPokey) {
+	  //printf("Alsa buffer run out of data, must generate more now\n");
+	  GenerateSamples(avail);
+	  continue;
+	} else {
+	  // Unfortunately, we cannot directly call pokey
+	  // here since we don't know the state of it and whether something
+	  // else is currently playing with it.
+	  return;
 	}
       }
       if (PlayingBuffer) {
@@ -525,7 +524,7 @@ void AlsaSound::HBI(void)
     // number of samples to generate this time.
     samples        = (remaining * cycles + CycleCarry) / (PokeyFreq * 114);         
     // keep the number of samples we did not take due to round-off   
-    CycleCarry    += remaining  * cycles - samples * PokeyFreq * UQUAD(114); 
+    CycleCarry    += remaining  * cycles - samples * PokeyFreq * UQUAD(114);
     assert(CycleCarry >= 0);
     UpdateSamples += samples;
     //
@@ -592,11 +591,11 @@ void AlsaSound::AdjustOverrun(void)
   // The buffer is running too full. This means we are
   // generating samples too fast. Reduce the sampling frequency.
   // We must do this very carefully as overruns accumulate data
-  newfreq = (EffectiveFreq * 4015) >> 12;
+  newfreq = (EffectiveFreq * 4095) >> 12;
   if (newfreq >= EffectiveFreq)
     newfreq--;
   EffectiveFreq      = newfreq;
-  DifferentialAdjust = -(LONG(BufferedSamples - BufferSize) * newfreq) >> 12;
+  DifferentialAdjust = -(LONG(BufferedSamples - BufferSize) * newfreq) >> 13;
   if (-DifferentialAdjust >= (newfreq >> 1))
     DifferentialAdjust = -(newfreq >> 1);
   // Drop buffer bytes we should have generated so far.
@@ -639,13 +638,13 @@ void AlsaSound::DisplayStatus(class Monitor *mon)
   mon->PrintStatus("Audio Output Status:\n"
 		   "\tAudio output enable           : %s\n"
 		   "\tConsole speaker enable        : %s\n"
-		   "\tConsole speaker volume        : " LD "\n"
+		   "\tConsole speaker volume        : " ATARIPP_LD "\n"
 		   "\tAudio output card             : %s\n"
-		   "\tSampling frequency            : " LD "Hz\n"
-		   "\tFragment size exponent        : " LD "\n"
-		   "\tNumber of fragments           : " LD "\n"
-		   "\tNumber of frames in the queue : " LD "\n"
-		   "\tEffective sampling frequency  : " LD "Hz\n"
+		   "\tSampling frequency            : " ATARIPP_LD "Hz\n"
+		   "\tFragment size exponent        : " ATARIPP_LD "\n"
+		   "\tNumber of fragments           : " ATARIPP_LD "\n"
+		   "\tNumber of frames in the queue : " ATARIPP_LD "\n"
+		   "\tEffective sampling frequency  : " ATARIPP_LD "Hz\n"
 		   "\tChannel duplication           : %s\n"
 		   "\tStereo sound                  : %s\n"
 		   "\tChannel bit depth             : %d\n"

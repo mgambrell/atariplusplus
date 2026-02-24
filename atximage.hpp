@@ -2,7 +2,7 @@
  **
  ** Atari++ emulator (c) 2002 THOR-Software, Thomas Richter
  **
- ** $Id: atximage.hpp,v 1.7 2020/03/21 20:51:44 thor Exp $
+ ** $Id: atximage.hpp,v 1.8 2020/04/04 18:01:41 thor Exp $
  **
  ** In this module: Disk image class for .atx images.
  **********************************************************************************/
@@ -44,6 +44,9 @@ class ATXImage : public DiskImage, private HBIAction {
   //
   // True if a sector has not been found.
   bool               SectorMissing;
+  //
+  // True if a sector has been marked as deleted.
+  bool               SectorDeleted;
   //
   // Current track position.
   UBYTE              TrackUnderHead;

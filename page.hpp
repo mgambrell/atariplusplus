@@ -2,7 +2,7 @@
  **
  ** Atari++ emulator (c) 2002 THOR-Software, Thomas Richter
  **
- ** $Id: page.hpp,v 1.17 2015/10/25 09:11:23 thor Exp $
+ ** $Id: page.hpp,v 1.19 2022/12/20 16:35:48 thor Exp $
  **
  ** In this module: Definition of an abstract page, keeping 256 in common
  **********************************************************************************/
@@ -14,12 +14,6 @@
 #include "types.hpp"
 #include "exceptions.hpp"
 #include "stdio.hpp"
-///
-
-/// Defines
-#define PAGE_MASK 0xff // mask out the page from an address
-#define PAGE_SHIFT 0x08 // shift to get the page index
-#define PAGE_LENGTH 0x100 // length of a page in bytes
 ///
 
 /// Class Page
@@ -36,6 +30,13 @@ protected:
   virtual void  ComplexWrite(ADR mem,UBYTE value) = 0;
   //
 public:
+  //
+  // A couple of constants to ease access to pages.
+  enum {
+    Page_Mask   = 0xff, // mask out the page from an address
+    Page_Shift  = 8,    // shift to get the page index
+    Page_Length = 0x100
+  };
   //
   // Constructors and destructors. 
   Page(void)
@@ -58,11 +59,15 @@ public:
   // Read a byte. Returns the byte read.
   UBYTE ReadByte(ADR mem)
   {
+#if 0
     if (memory) {
-      return memory[mem & PAGE_MASK];
+      return memory[mem & Page_Mask];
     } else {
       return ComplexRead(mem);
     }
+#else
+    return ComplexRead(mem);
+#endif
   }
   //
   // Write a byte to a page, return the "vsync" flag to indicate whether the
@@ -70,7 +75,7 @@ public:
   void WriteByte(ADR mem,UBYTE val)
   {
     if (memory) {
-      memory[mem & PAGE_MASK] = val;
+      memory[mem & Page_Mask] = val;
     } else {
       ComplexWrite(mem,val);
     }
