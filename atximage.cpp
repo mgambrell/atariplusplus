@@ -2,7 +2,7 @@
  **
  ** Atari++ emulator (c) 2002 THOR-Software, Thomas Richter
  **
- ** $Id: atximage.cpp,v 1.11 2015/07/14 20:01:00 thor Exp $
+ ** $Id: atximage.cpp,v 1.12 2020/03/21 20:51:44 thor Exp $
  **
  ** In this module: Disk image class for .atx images.
  **********************************************************************************/
@@ -35,9 +35,9 @@
 /// ATXImage::ATXImage
 ATXImage::ATXImage(class Machine *mach)
   : DiskImage(mach), HBIAction(mach),
-    Image(NULL), 
+    Image(NULL),
     Protected(false), CRCError(false), LostDataError(false), SectorMissing(false),
-    TrackUnderHead(0), HeadPosition(0), 
+    TrackUnderHead(0), SectorsPerTrack(18), DefaultSectorSize(128), HeadPosition(0),
     TrackList(NULL)
 {
   
@@ -94,7 +94,7 @@ void ATXImage::OpenImage(class ImageStream *image)
   SectorMissing   = false;
   //
   // Default is SD
-  SectorsPerTrack = 18;
+  SectorsPerTrack   = 18;
   DefaultSectorSize = 128;
   //
   try {
@@ -261,13 +261,17 @@ void ATXImage::OpenImage(class ImageStream *image)
 	  // How do I get the sector size in bytes???
 	  if (sectorstatus & Track::Sector::Missing) {
 	    sector->SectorSize   = 0;
+	    sector->WeakOffset   = 0;
 	    sector->Offset       = 0;
 #if CHECK_LEVEL > 0
 	    printf("Found a missing sector in track %d, sector %d\n",tracknumber,sectornumber);
 #endif
 	  } else {
 	    sector->SectorSize   = 256; // Fixup later.
+	    sector->WeakOffset   = 256; // Fixup later, or never.
 	    sector->Offset       = sectordata;
+	    if (sectorstatus & Track::Sector::CRCError)
+	      sector->WeakOffset = 0;
 	  }
 #if CHECK_LEVEL > 0
 	  {
@@ -517,22 +521,27 @@ struct ATXImage::Track::Sector *ATXImage::FindSector(UWORD sectornumber,UWORD *d
   //
 /// ATXImage::SectorSize
 // Return the sector size of the image.
-UWORD ATXImage::SectorSize(UWORD sectornumber)
+UWORD ATXImage::SectorSize(UWORD /*sectornumber*/)
 {
+  /*
   struct Track::Sector *sector;
+  */
 
 #if CHECK_LEVEL > 0
   if (Image == NULL)
     Throw(ObjectDoesntExist,"ATXImage::SectorSize","image is not yet open");
 #endif
   //
+  /*
   sector = FindSector(sectornumber,NULL);
-  // 
+  //
   if (sector == NULL || (sector->SectorStatus & Track::Sector::Missing)) {
     return DefaultSectorSize;
   }
   
   return sector->SectorSize;
+  */
+  return DefaultSectorSize;
 }
 ///
 
@@ -611,7 +620,7 @@ UBYTE ATXImage::ReadSector(UWORD sectornumber,UBYTE *buffer,UWORD &delay)
   //
   // Compute the sector offset now.
   offset = sector->Offset;
-  size   = sector->SectorSize;
+  size   = SectorSize(sectornumber);
   //
   if (Image->Read(offset,buffer,size)) {
     //

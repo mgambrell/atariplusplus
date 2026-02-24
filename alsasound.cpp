@@ -2,7 +2,7 @@
  **
  ** Atari++ emulator (c) 2002 THOR-Software, Thomas Richter
  **
- ** $Id: alsasound.cpp,v 1.32 2015/03/21 14:31:27 thor Exp $
+ ** $Id: alsasound.cpp,v 1.33 2020/03/28 14:05:58 thor Exp $
  **
  ** In this module: Os interface towards sound output for the alsa sound system
  **********************************************************************************/
@@ -51,6 +51,7 @@ AlsaSound::~AlsaSound(void)
   // get rid of all data within here.
   if (SoundStream) {
     // This also unlinks the pcm handler.
+    SuspendAudio();
     snd_pcm_close(SoundStream);
     SoundStream = NULL;
   }
@@ -691,7 +692,8 @@ void AlsaSound::ParseArgs(class ArgParser *args)
 		   4,16,NumFrags);  
   // Re-read the base frequency
   PokeyFreq = LeftPokey->BaseFrequency();
-  if (SoundStream) {    
+  if (SoundStream) {
+    SuspendAudio();
     snd_pcm_close(SoundStream);
     SoundStream = NULL;
     CleanBuffer();
