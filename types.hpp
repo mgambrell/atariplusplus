@@ -11,6 +11,7 @@
 
 //MBG: normalize stuff
 
+#include "types.h"
 #include <stdint.h>
 
 #define NULL 0
