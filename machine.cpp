@@ -833,8 +833,18 @@ void Machine::ParseConfig(class ArgParser *args)
 }
 ///
 
+/// Machine::SetDisplay
+// Replace the display frontend (for embedded use)
+void Machine::SetDisplay(class AtariDisplay *d)
+{
+  delete display;
+  display = d;
+  nogfx   = true; // embedded frontends don't have GUI
+}
+///
+
 /// Machine::ParseArgs
-// Parse arguments from the command line to 
+// Parse arguments from the command line to
 // get the machine type we are emulating.
 // If we call this with NULL, use the global arguments
 ArgParser::ArgumentChange Machine::ParseArgs(class ArgParser *args)
