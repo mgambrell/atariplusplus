@@ -841,6 +841,14 @@ void Machine::SetDisplay(class AtariDisplay *d)
   display = d;
   nogfx   = true; // embedded frontends don't have GUI
 }
+
+/// Machine::SetSound
+// Replace the sound backend (for embedded use)
+void Machine::SetSound(class Sound *s)
+{
+  delete sound;
+  sound = s;
+}
 ///
 
 /// Machine::ParseArgs

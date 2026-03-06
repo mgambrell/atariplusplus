@@ -406,6 +406,7 @@ public:
   //
   // Replace the display frontend (for embedded use)
   void SetDisplay(class AtariDisplay *d);
+  void SetSound(class Sound *s);
   //
   // Return the display responsible for the 80 character output
   class AtariDisplay *XEPDisplay(void) const
