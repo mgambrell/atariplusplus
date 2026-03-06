@@ -154,6 +154,9 @@ public:
   {
     return CartList.First();
   }
+  //
+  // Set the cartridge path directly (for embedded use, bypasses arg parser)
+  void SetCartPath(const char *path);
 };
 ///
 

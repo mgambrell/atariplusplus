@@ -474,3 +474,24 @@ void CartROM::DisplayStatus(class Monitor *mon)
   mon->PrintStatus("\n");
 }
 ///
+
+/// CartROM::SetCartPath
+// Set the cartridge path directly for embedded use (bypasses arg parser)
+void CartROM::SetCartPath(const char *path)
+{
+  bool withheader = false;
+  delete[] cartpath;
+  cartpath = NULL;
+  delete[] cartinsert;
+  cartinsert = NULL;
+  if (path) {
+    cartpath = new char[strlen(path) + 1];
+    strcpy(cartpath, path);
+    cartinsert = new char[strlen(path) + 1];
+    strcpy(cartinsert, path);
+  }
+  swapcarts = true;
+  carttoload = GuessCartType(path, withheader, cartsize);
+  skipheader = withheader;
+}
+///
