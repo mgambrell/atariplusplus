@@ -1496,6 +1496,10 @@ public:
   {
     return GlobalPC;
   }
+  class AdrSpace *GetRam(void) const
+  {
+    return Ram;
+  }
   UBYTE &A(void)
   {
     return GlobalA;
