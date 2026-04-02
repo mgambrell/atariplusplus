@@ -80,6 +80,12 @@ public:
   {
     return NTSC;
   }
+  //
+  // Set the NTSC flag (must be called before ParseArgs)
+  void setNTSC(bool ntsc)
+  {
+    NTSC = ntsc;
+  }
 };
 ///
 

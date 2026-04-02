@@ -260,9 +260,15 @@ public:
   }
   //
   // Return the machine type
-  Machine_Type MachType(void) const 
+  Machine_Type MachType(void) const
   {
     return machtype;
+  }
+  //
+  // Set the machine type (must be called before ParseArgs)
+  void SetMachType(Machine_Type t)
+  {
+    machtype = t;
   }
   //
   // Parse off arguments: Must be called not before

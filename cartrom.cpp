@@ -477,7 +477,7 @@ void CartROM::DisplayStatus(class Monitor *mon)
 
 /// CartROM::SetCartPath
 // Set the cartridge path directly for embedded use (bypasses arg parser)
-void CartROM::SetCartPath(const char *path)
+void CartROM::SetCartPath(const char *path, Cartridge::CartTypeId cartTypeOverride)
 {
   bool withheader = false;
   delete[] cartpath;
@@ -493,5 +493,8 @@ void CartROM::SetCartPath(const char *path)
   swapcarts = true;
   carttoload = GuessCartType(path, withheader, cartsize);
   skipheader = withheader;
+  if (cartTypeOverride != Cartridge::Cart_None) {
+    carttoload = cartTypeOverride;
+  }
 }
 ///

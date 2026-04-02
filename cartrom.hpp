@@ -156,7 +156,8 @@ public:
   }
   //
   // Set the cartridge path directly (for embedded use, bypasses arg parser)
-  void SetCartPath(const char *path);
+  // If cartTypeOverride is not Cart_None, it overrides the auto-detected type.
+  void SetCartPath(const char *path, Cartridge::CartTypeId cartTypeOverride = Cartridge::Cart_None);
 };
 ///
 
