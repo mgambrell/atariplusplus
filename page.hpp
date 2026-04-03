@@ -89,6 +89,9 @@ public:
   //
   // Read a page from an external file
   bool ReadFromFile(FILE *file);
+  
+  void ReadFromMemory(const void*& ptr);
+  
   // Write a page to an external file
   bool WriteToFile(FILE *file);
   //

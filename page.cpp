@@ -34,6 +34,14 @@ bool Page::ReadFromFile(FILE *file)
 }
 ///
 
+void Page::ReadFromMemory(const void*& ptr)
+{
+	const uint8_t* buffer = (const uint8_t *)ptr;
+	for(int i = 0; i < 256; i++)
+		PatchByte(i, buffer[i]);
+	ptr = (const void*)((uintptr_t)ptr + 256);
+}
+
 /// Page::WriteToFile
 // Write a page to an external file
 // This respects special access rules for the page

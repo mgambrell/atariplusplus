@@ -76,6 +76,9 @@ public:
   void LoadROM(void);
   // Load one or several pages from a file into the Os ROM
   int LoadFromFile(const char *path,int pages);
+  
+  void LoadFromMemory(const void* buffer, int pages);
+
   // Special service for the built-in ROM: Patch the ROM contents
   // from a static image
   void PatchFromDump(const unsigned char *dump,int pages);

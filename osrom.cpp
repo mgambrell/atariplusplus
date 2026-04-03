@@ -28,6 +28,9 @@
 #include "stdio.hpp"
 ///
 
+//fill this buffer with the os5200 rom
+uint8_t atariplusplus_os5200_buffer[2048];
+
 /// OsROM::OsROM
 OsROM::OsROM(class Machine *mach)
   : Chip(mach,"OsROM"), PatchProvider(mach)
@@ -74,7 +77,18 @@ OsROM::~OsROM(void)
   delete[] hdir[2];
   delete[] hdir[3];
 }
-///
+
+
+void OsROM::LoadFromMemory(const void* buffer, int pages)
+{
+	class RomPage* page = rom;
+
+	do
+	{
+		page->ReadFromMemory(buffer);
+		page++;
+	} while(--pages);
+}
 
 /// OsROM::LoadFromFile
 // Load one or several pages from a file into the Os ROM
@@ -247,6 +261,9 @@ void OsROM::LoadROM(void)
   int error; 
   OsType type = RomType();
 
+  //TEST
+  //os5200path = (char*)"C:\\rg\\arethagb\\Assets\\roms\\5200.rom";
+
   switch(type) {
   case Os_RomA:
     // Ok, try to load the OsA ROM.
@@ -298,15 +315,7 @@ void OsROM::LoadROM(void)
 			   "Failed to load OsXL ROM from %s.",osxlpath));
     break;
   case Os_5200:
-    if (!os5200path) {      
-      Throw(ObjectDoesntExist,"OsROM::LoadROM",
-	    "Path to Os5200 ROM unspecified. This ROM is not available."
-	    "Pick a suitable ROM path in the OsROM topic of the user menu");
-    } else {
-      if ((error = LoadFromFile(os5200path,8)))
-	throw(AtariException(strerror(error),"OsROM::LoadROM",
-			     "Failed to load Os5200 ROM from %s.",os5200path));
-    }
+    LoadFromMemory(atariplusplus_os5200_buffer,8);
     break;
   case Os_Builtin:
     // This is special as it doesn't require a source file.
